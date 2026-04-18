@@ -1,8 +1,14 @@
 package main
 
 import (
+	"async-api-task-manager/internal/service"
 	"async-api-task-manager/internal/storage/postgres"
+	repository2 "async-api-task-manager/internal/storage/postgres/repository"
+	"async-api-task-manager/internal/transport/http"
+	"async-api-task-manager/internal/transport/http/handler"
+
 	"fmt"
+	"log"
 	"os"
 )
 
@@ -18,6 +24,22 @@ func main() {
 
 	database, err := postgres.NewPostgres(dsn)
 
+	if err != nil {
+		log.Fatalf("connect db: %v", err)
+	}
+	log.Println("database connected")
+
+	taskRepo := repository2.NewTaskRepository(database)
+	taskService := service.NewTaskService(taskRepo)
+	taskHandler := handler.NewTaskHandler(taskService)
+
+	r := http.SetupRouter(taskHandler)
+	log.Println("router initialized")
+
+	log.Println("server started on :8080")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatalf("run server: %v", err)
+	}
 	// graceful shutdown
 }
 
