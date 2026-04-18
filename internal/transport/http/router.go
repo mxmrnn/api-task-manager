@@ -10,5 +10,10 @@ func SetupRouter(taskHandler *handler.TaskHandler) *gin.Engine {
 
 	r.GET("/health", taskHandler.Health)
 
+	tasks := r.Group("/tasks")
+	{
+		tasks.POST("/", taskHandler.CreateTask)
+	}
+
 	return r
 }
