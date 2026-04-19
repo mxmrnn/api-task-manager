@@ -88,6 +88,35 @@ func (h *TaskHandler) ListTasks(c *gin.Context) {
 	c.JSON(http.StatusOK, tasks)
 }
 
+func (h *TaskHandler) UpdateTask(c *gin.Context) {
+	var req dto.TaskUpdateRequest
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	err = h.taskService.UpdateTask(c.Request.Context(), req, id)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrTaskNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		case errors.Is(err, service.ErrTitleTooShort),
+			errors.Is(err, service.ErrInvalidTaskStatus):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+	}
+	c.Status(http.StatusNoContent)
+
+}
+
 func parseUUIDQuery(c *gin.Context, key string) (*uuid.UUID, error) {
 	v := c.Query(key)
 	if v == "" {

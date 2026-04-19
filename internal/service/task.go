@@ -17,12 +17,14 @@ type TaskRepository interface {
 	Create(ctx context.Context, task *model.Task) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Task, error)
 	List(ctx context.Context, filter dto.Filter) ([]model.Task, error)
+	Update(ctx context.Context, task *model.Task) error
 }
 
 type TaskService interface {
 	CreateTask(ctx context.Context, req dto.TaskCreateRequest) (dto.TaskCreatedResponse, error)
 	GetTaskByID(ctx context.Context, id uuid.UUID) (dto.TaskDetailResponse, error)
 	ListTasks(ctx context.Context, filter dto.Filter) ([]dto.TaskListItemResponse, error)
+	UpdateTask(ctx context.Context, req dto.TaskUpdateRequest, id uuid.UUID) error
 }
 
 type taskService struct {
@@ -157,6 +159,63 @@ func toTaskListItemResponse(task model.Task) dto.TaskListItemResponse {
 		BoardName:    boardName,
 		ColumnName:   columnName,
 	}
+}
+
+func (s *taskService) UpdateTask(ctx context.Context, req dto.TaskUpdateRequest, id uuid.UUID) error {
+	task, err := s.taskRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrTaskNotFound) {
+			return ErrTaskNotFound
+		}
+		return err
+	}
+
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if utf8.RuneCountInString(title) < 3 {
+			return ErrTitleTooShort
+		}
+		task.Title = title
+	}
+
+	if req.Description != nil {
+		task.Description = strings.TrimSpace(*req.Description)
+	}
+
+	if req.Status != nil {
+		status := *req.Status
+		if !isValidTaskStatus(status) {
+			return ErrInvalidTaskStatus
+		}
+		task.Status = status
+	}
+
+	if req.AssigneeID != nil {
+		task.AssigneeID = req.AssigneeID
+	}
+
+	if req.BoardID != nil {
+		task.BoardID = req.BoardID
+	}
+
+	if req.ColumnID != nil {
+		task.BoardColumnID = req.ColumnID
+	}
+
+	if req.SprintID != nil {
+		task.SprintID = req.SprintID
+	}
+
+	if req.GroupID != nil {
+		task.GroupID = req.GroupID
+	}
+
+	if err := s.taskRepo.Update(ctx, task); err != nil {
+		return err
+	}
+
+	return nil
+
 }
 
 func (s *taskService) CreateTask(ctx context.Context, req dto.TaskCreateRequest) (dto.TaskCreatedResponse, error) {

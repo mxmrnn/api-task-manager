@@ -16,3 +16,14 @@ type TaskCreateRequest struct {
 	SprintID    *uuid.UUID        `json:"sprint_id,omitempty"`
 	GroupID     *uuid.UUID        `json:"group_id,omitempty"`
 }
+
+type TaskUpdateRequest struct {
+	Title       *string           `json:"title,omitempty"`
+	Description *string           `json:"description,omitempty"`
+	Status      *model.TaskStatus `json:"status,omitempty"`
+	AssigneeID  *uuid.UUID        `json:"assignee_id,omitempty"`
+	BoardID     *uuid.UUID        `json:"board_id,omitempty"`
+	ColumnID    *uuid.UUID        `json:"column_id,omitempty"`
+	SprintID    *uuid.UUID        `json:"sprint_id,omitempty"`
+	GroupID     *uuid.UUID        `json:"group_id,omitempty"`
+}

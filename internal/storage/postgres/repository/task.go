@@ -66,6 +66,13 @@ func (r *TaskRepository) List(ctx context.Context, filter taskdomain.Filter) ([]
 	return list, nil
 }
 
+func (r *TaskRepository) Update(ctx context.Context, task *model.Task) error {
+	if err := r.db.WithContext(ctx).Save(task).Error; err != nil {
+		return fmt.Errorf("task repository update: %w", err)
+	}
+	return nil
+}
+
 func (r *TaskRepository) Create(ctx context.Context, task *model.Task) error {
 	if err := r.db.WithContext(ctx).Create(task).Error; err != nil {
 		return fmt.Errorf("task repository create: %w", err)
