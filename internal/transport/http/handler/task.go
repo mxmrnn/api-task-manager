@@ -5,6 +5,7 @@ import (
 	"async-api-task-manager/internal/transport/http/dto"
 	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"net/http"
 )
 
@@ -22,6 +23,35 @@ func (h *TaskHandler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok",
 	})
+}
+
+func (h *TaskHandler) GetTaskByID(c *gin.Context) {
+	idParam := c.Param("id")
+
+	id, err := uuid.Parse(idParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid task id",
+		})
+		return
+	}
+
+	task, err := h.taskService.GetTaskByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, service.ErrTaskNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "task not found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to get task",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, task)
 }
 
 func (h *TaskHandler) CreateTask(c *gin.Context) {
