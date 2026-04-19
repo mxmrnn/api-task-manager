@@ -9,6 +9,16 @@ type TaskCreatedResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 
+type TaskListItemResponse struct {
+	ID           uuid.UUID        `json:"id"`
+	Title        string           `json:"title"`
+	Status       model.TaskStatus `json:"status"`
+	AssigneeID   *uuid.UUID       `json:"assignee_id,omitempty"`
+	AssigneeName *string          `json:"assignee_name,omitempty"`
+	BoardName    *string          `json:"board_name,omitempty"`
+	ColumnName   *string          `json:"column_name,omitempty"`
+}
+
 type TaskDetailResponse struct {
 	ID          uuid.UUID        `json:"id"`
 	Title       string           `json:"title"`

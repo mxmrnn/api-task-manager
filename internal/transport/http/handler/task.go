@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"async-api-task-manager/internal/model"
 	"async-api-task-manager/internal/service"
 	"async-api-task-manager/internal/transport/http/dto"
 	"errors"
@@ -52,6 +53,64 @@ func (h *TaskHandler) GetTaskByID(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, task)
+}
+
+func (h *TaskHandler) ListTasks(c *gin.Context) {
+	var filter dto.Filter
+
+	authorID, err := parseUUIDQuery(c, "author_id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid author_id"})
+		return
+	}
+	filter.Author = authorID
+
+	assigneeID, err := parseUUIDQuery(c, "assignee_id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignee_id"})
+		return
+	}
+	filter.Assignee = assigneeID
+
+	status, err := parseStatusQuery(c, "status")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+		return
+	}
+	filter.Status = status
+
+	tasks, err := h.taskService.ListTasks(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list tasks"})
+		return
+	}
+
+	c.JSON(http.StatusOK, tasks)
+}
+
+func parseUUIDQuery(c *gin.Context, key string) (*uuid.UUID, error) {
+	v := c.Query(key)
+	if v == "" {
+		return nil, nil
+	}
+
+	id, err := uuid.Parse(v)
+	if err != nil {
+		return nil, err
+	}
+
+	return &id, nil
+}
+
+func parseStatusQuery(c *gin.Context, key string) (*model.TaskStatus, error) {
+	v := c.Query(key)
+	if v == "" {
+		return nil, nil
+	}
+
+	status := model.TaskStatus(v)
+
+	return &status, nil
 }
 
 func (h *TaskHandler) CreateTask(c *gin.Context) {

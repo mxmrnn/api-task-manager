@@ -16,11 +16,13 @@ import (
 type TaskRepository interface {
 	Create(ctx context.Context, task *model.Task) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Task, error)
+	List(ctx context.Context, filter dto.Filter) ([]model.Task, error)
 }
 
 type TaskService interface {
 	CreateTask(ctx context.Context, req dto.TaskCreateRequest) (dto.TaskCreatedResponse, error)
 	GetTaskByID(ctx context.Context, id uuid.UUID) (dto.TaskDetailResponse, error)
+	ListTasks(ctx context.Context, filter dto.Filter) ([]dto.TaskListItemResponse, error)
 }
 
 type taskService struct {
@@ -108,6 +110,52 @@ func toTaskDetailResponse(task model.Task) dto.TaskDetailResponse {
 		Column:   column,
 		Sprint:   sprint,
 		Group:    group,
+	}
+}
+
+func (s *taskService) ListTasks(ctx context.Context, filter dto.Filter) ([]dto.TaskListItemResponse, error) {
+	if filter.Status != nil {
+		if !isValidTaskStatus(*filter.Status) {
+			return nil, ErrInvalidTaskStatus
+		}
+	}
+
+	list, err := s.taskRepo.List(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]dto.TaskListItemResponse, 0, len(list))
+	for _, t := range list {
+		res = append(res, toTaskListItemResponse(t))
+	}
+	return res, nil
+}
+
+func toTaskListItemResponse(task model.Task) dto.TaskListItemResponse {
+	var assigneeName *string
+	if task.Assignee != nil {
+		assigneeName = &task.Assignee.FullName
+	}
+
+	var boardName *string
+	if task.Board != nil {
+		boardName = &task.Board.Name
+	}
+
+	var columnName *string
+	if task.BoardColumn != nil {
+		columnName = &task.BoardColumn.Name
+	}
+
+	return dto.TaskListItemResponse{
+		ID:           task.ID,
+		Title:        task.Title,
+		Status:       task.Status,
+		AssigneeID:   task.AssigneeID,
+		AssigneeName: assigneeName,
+		BoardName:    boardName,
+		ColumnName:   columnName,
 	}
 }
 

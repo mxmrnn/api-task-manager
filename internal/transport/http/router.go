@@ -14,6 +14,7 @@ func SetupRouter(taskHandler *handler.TaskHandler) *gin.Engine {
 	{
 		tasks.POST("/", taskHandler.CreateTask)
 		tasks.GET("/:id", taskHandler.GetTaskByID)
+		tasks.GET("/", taskHandler.ListTasks)
 	}
 
 	return r

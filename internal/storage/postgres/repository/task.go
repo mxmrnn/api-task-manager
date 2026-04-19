@@ -1,6 +1,7 @@
 package repository
 
 import (
+	taskdomain "async-api-task-manager/internal/transport/http/dto"
 	"context"
 	"errors"
 	"fmt"
@@ -40,6 +41,29 @@ func (r *TaskRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Task
 	}
 
 	return &task, nil
+}
+
+func (r *TaskRepository) List(ctx context.Context, filter taskdomain.Filter) ([]model.Task, error) {
+	var list []model.Task
+
+	query := r.db.WithContext(ctx).Model(&model.Task{})
+	if filter.Status != nil {
+		query = query.Where("status = ?", filter.Status)
+	}
+
+	if filter.Author != nil {
+		query = query.Where("author_id = ?", filter.Author)
+	}
+
+	if filter.Assignee != nil {
+		query = query.Where("assignee_id = ?", filter.Assignee)
+	}
+
+	if err := query.Find(&list).Error; err != nil {
+		return nil, fmt.Errorf("task repository list: %w", err)
+	}
+
+	return list, nil
 }
 
 func (r *TaskRepository) Create(ctx context.Context, task *model.Task) error {
