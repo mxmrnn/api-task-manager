@@ -18,6 +18,7 @@ type TaskRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Task, error)
 	List(ctx context.Context, filter dto.Filter) ([]model.Task, error)
 	Update(ctx context.Context, task *model.Task) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type TaskService interface {
@@ -25,6 +26,7 @@ type TaskService interface {
 	GetTaskByID(ctx context.Context, id uuid.UUID) (dto.TaskDetailResponse, error)
 	ListTasks(ctx context.Context, filter dto.Filter) ([]dto.TaskListItemResponse, error)
 	UpdateTask(ctx context.Context, req dto.TaskUpdateRequest, id uuid.UUID) error
+	DeleteTask(ctx context.Context, id uuid.UUID) error
 }
 
 type taskService struct {
@@ -259,6 +261,19 @@ func isValidTaskStatus(status model.TaskStatus) bool {
 	default:
 		return false
 	}
+}
+
+func (s *taskService) DeleteTask(ctx context.Context, id uuid.UUID) error {
+	err := s.taskRepo.Delete(ctx, id)
+
+	if err != nil {
+		if errors.Is(err, repository.ErrTaskNotFound) {
+			return ErrTaskNotFound
+		}
+		return err
+	}
+
+	return nil
 }
 
 func toTaskCreatedResponse(task model.Task) dto.TaskCreatedResponse {

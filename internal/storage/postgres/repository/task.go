@@ -79,3 +79,17 @@ func (r *TaskRepository) Create(ctx context.Context, task *model.Task) error {
 	}
 	return nil
 }
+
+func (r *TaskRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	res := r.db.WithContext(ctx).Delete(&model.Task{}, id)
+
+	if res.Error != nil {
+		return fmt.Errorf("task repository delete: %w", res.Error)
+	}
+
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("task repository delete: %w", ErrTaskNotFound)
+	}
+
+	return nil
+}

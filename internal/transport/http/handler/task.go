@@ -164,3 +164,23 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, task)
 }
+
+func (h *TaskHandler) DeleteTask(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+	err = h.taskService.DeleteTask(c.Request.Context(), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrTaskNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
+	}
+	c.Status(http.StatusNoContent)
+}
