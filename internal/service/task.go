@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"async-api-task-manager/internal/model"
+	"async-api-task-manager/internal/worker"
 )
 
 type TaskRepository interface {
@@ -31,11 +32,13 @@ type TaskService interface {
 
 type taskService struct {
 	taskRepo TaskRepository
+	worker   *worker.Worker
 }
 
-func NewTaskService(taskRepo TaskRepository) TaskService {
+func NewTaskService(taskRepo TaskRepository, bgWorker *worker.Worker) TaskService {
 	return &taskService{
 		taskRepo: taskRepo,
+		worker:   bgWorker,
 	}
 }
 
@@ -216,8 +219,14 @@ func (s *taskService) UpdateTask(ctx context.Context, req dto.TaskUpdateRequest,
 		return err
 	}
 
+	if s.worker != nil {
+		s.worker.Enqueue(worker.Job{
+			Type:       worker.JobTypeTaskUpdated,
+			TaskID:     task.ID,
+			AssigneeID: task.AssigneeID,
+		})
+	}
 	return nil
-
 }
 
 func (s *taskService) CreateTask(ctx context.Context, req dto.TaskCreateRequest) (dto.TaskCreatedResponse, error) {
@@ -251,6 +260,14 @@ func (s *taskService) CreateTask(ctx context.Context, req dto.TaskCreateRequest)
 		return dto.TaskCreatedResponse{}, err
 	}
 
+	if s.worker != nil {
+		s.worker.Enqueue(worker.Job{
+			Type:       worker.JobTypeTaskCreated,
+			TaskID:     task.ID,
+			AssigneeID: task.AssigneeID,
+		})
+	}
+
 	return toTaskCreatedResponse(task), nil
 }
 
@@ -271,6 +288,13 @@ func (s *taskService) DeleteTask(ctx context.Context, id uuid.UUID) error {
 			return ErrTaskNotFound
 		}
 		return err
+	}
+
+	if s.worker != nil {
+		s.worker.Enqueue(worker.Job{
+			Type:   worker.JobTypeTaskDeleted,
+			TaskID: id,
+		})
 	}
 
 	return nil

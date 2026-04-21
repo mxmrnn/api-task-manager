@@ -6,7 +6,8 @@ import (
 	repository2 "async-api-task-manager/internal/storage/postgres/repository"
 	"async-api-task-manager/internal/transport/http"
 	"async-api-task-manager/internal/transport/http/handler"
-
+	"async-api-task-manager/internal/worker"
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -28,12 +29,20 @@ func main() {
 	}
 	log.Println("database connected")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w := worker.NewWorker(10)
+	go w.Start(ctx)
+
+	log.Println("worker launched")
+
 	userRepo := repository2.NewUserRepository(database)
 	userService := service.NewUserService(userRepo)
 	userHandler := handler.NewUserHandler(userService)
 
 	taskRepo := repository2.NewTaskRepository(database)
-	taskService := service.NewTaskService(taskRepo)
+	taskService := service.NewTaskService(taskRepo, w)
 	taskHandler := handler.NewTaskHandler(taskService)
 
 	r := http.SetupRouter(taskHandler, userHandler)
