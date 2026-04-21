@@ -23,17 +23,20 @@ func main() {
 	)
 
 	database, err := postgres.NewPostgres(dsn)
-
 	if err != nil {
 		log.Fatalf("connect db: %v", err)
 	}
 	log.Println("database connected")
 
+	userRepo := repository2.NewUserRepository(database)
+	userService := service.NewUserService(userRepo)
+	userHandler := handler.NewUserHandler(userService)
+
 	taskRepo := repository2.NewTaskRepository(database)
 	taskService := service.NewTaskService(taskRepo)
 	taskHandler := handler.NewTaskHandler(taskService)
 
-	r := http.SetupRouter(taskHandler)
+	r := http.SetupRouter(taskHandler, userHandler)
 	log.Println("router initialized")
 
 	log.Println("server started on :8080")

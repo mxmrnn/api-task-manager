@@ -5,7 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(taskHandler *handler.TaskHandler) *gin.Engine {
+func SetupRouter(taskHandler *handler.TaskHandler, userHandeler *handler.UserHandler) *gin.Engine {
 	r := gin.Default()
 
 	r.GET("/health", taskHandler.Health)
@@ -17,6 +17,11 @@ func SetupRouter(taskHandler *handler.TaskHandler) *gin.Engine {
 		tasks.GET("/", taskHandler.ListTasks)
 		tasks.PATCH("/:id", taskHandler.UpdateTask)
 		tasks.DELETE("/:id", taskHandler.DeleteTask)
+	}
+
+	user := r.Group("/user")
+	{
+		user.POST("/", userHandeler.CreateUser)
 	}
 
 	return r
