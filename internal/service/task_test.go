@@ -221,6 +221,104 @@ func TestTaskService_ListTasks(t *testing.T) {
 	}
 }
 
+func TestTaskService_CreateTask(t *testing.T) {
+	tests := []struct {
+		name      string
+		req       dto.TaskCreateRequest
+		mockSetup func(*MockTaskRepository)
+		wantErr   error
+	}{
+		{
+			name: "success create task",
+			req: dto.TaskCreateRequest{
+				Title:       "test title",
+				Description: "test description",
+				AuthorID:    uuid.New(),
+			},
+			mockSetup: func(m *MockTaskRepository) {
+				m.On("Create", mock.Anything, mock.AnythingOfType("*model.Task")).
+					Run(func(args mock.Arguments) {
+						task := args.Get(1).(*model.Task)
+						if task.ID == uuid.Nil {
+							task.ID = uuid.New()
+						}
+					}).
+					Return(nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "err title too short",
+			req: dto.TaskCreateRequest{
+				Title:    "ab", // меньше 3 символов
+				AuthorID: uuid.New(),
+			},
+			mockSetup: func(m *MockTaskRepository) {
+			},
+			wantErr: service.ErrTitleTooShort,
+		},
+		{
+			name: "err not valid status",
+			req: dto.TaskCreateRequest{
+				Title:    "test title",
+				Status:   ptr(t, model.TaskStatus("invalid")),
+				AuthorID: uuid.New(),
+			},
+			mockSetup: func(m *MockTaskRepository) {},
+			wantErr:   service.ErrInvalidTaskStatus,
+		},
+		{
+			name: "err from repository",
+			req: dto.TaskCreateRequest{
+				Title:    "test task",
+				AuthorID: uuid.New(),
+			},
+			mockSetup: func(m *MockTaskRepository) {
+				m.On("Create", mock.Anything, mock.AnythingOfType("*model.Task")).
+					Return(errors.New("unique constraint violation"))
+			},
+			wantErr: errors.New("unique constraint violation"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockRepo := &MockTaskRepository{}
+			tt.mockSetup(mockRepo)
+
+			svc := service.NewTaskService(mockRepo, &worker.Worker{})
+
+			// Act
+			resp, err := svc.CreateTask(context.Background(), tt.req)
+
+			// Assert
+			if tt.wantErr != nil {
+				assert.Error(t, err)
+
+				if errors.Is(tt.wantErr, service.ErrTitleTooShort) {
+					assert.True(t, errors.Is(err, service.ErrTitleTooShort))
+				} else if errors.Is(tt.wantErr, service.ErrInvalidTaskStatus) {
+					assert.True(t, errors.Is(err, service.ErrInvalidTaskStatus))
+				} else {
+					assert.EqualError(t, err, tt.wantErr.Error())
+				}
+
+				if errors.Is(tt.wantErr, service.ErrTitleTooShort) || errors.Is(tt.wantErr, service.ErrInvalidTaskStatus) {
+					mockRepo.AssertNotCalled(t, "Create")
+				}
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.NotEmpty(t, resp.ID)
+			assert.NotEqual(t, uuid.Nil, resp.ID)
+			mockRepo.AssertExpectations(t)
+
+		})
+	}
+}
+
 func ptr[T any](t *testing.T, v T) *T {
 	t.Helper()
 	return &v
