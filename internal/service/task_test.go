@@ -319,6 +319,63 @@ func TestTaskService_CreateTask(t *testing.T) {
 	}
 }
 
+func TestTaskService_DeleteTask(t *testing.T) {
+	tests := []struct {
+		name      string
+		id        uuid.UUID
+		mockSetup func(*MockTaskRepository)
+		wantErr   error
+	}{
+		{
+			name: "success delete task",
+			id:   uuid.New(),
+			mockSetup: func(m *MockTaskRepository) {
+				m.On("Delete", mock.Anything, mock.Anything).Return(nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "task not found",
+			id:   uuid.New(),
+			mockSetup: func(m *MockTaskRepository) {
+				m.On("Delete", mock.Anything, mock.Anything).Return(repository.ErrTaskNotFound)
+			},
+			wantErr: service.ErrTaskNotFound,
+		},
+		{
+			name: "other repository error",
+			id:   uuid.New(),
+			mockSetup: func(m *MockTaskRepository) {
+				m.On("Delete", mock.Anything, mock.Anything).
+					Return(errors.New("database error"))
+			},
+			wantErr: errors.New("database error"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := &MockTaskRepository{}
+			tt.mockSetup(mockRepo)
+			srv := service.NewTaskService(mockRepo, &worker.Worker{})
+
+			err := srv.DeleteTask(context.Background(), tt.id)
+
+			if tt.wantErr != nil {
+				assert.Error(t, err)
+				if errors.Is(tt.wantErr, service.ErrTaskNotFound) {
+					assert.True(t, errors.Is(err, service.ErrTaskNotFound))
+				}
+
+				mockRepo.AssertExpectations(t)
+				return
+			}
+
+			assert.NoError(t, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
 func ptr[T any](t *testing.T, v T) *T {
 	t.Helper()
 	return &v
