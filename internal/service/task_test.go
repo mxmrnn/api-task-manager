@@ -376,6 +376,114 @@ func TestTaskService_DeleteTask(t *testing.T) {
 	}
 }
 
+func TestTaskService_UpdateTask(t *testing.T) {
+	taskID := uuid.New()
+	tests := []struct {
+		name      string
+		req       dto.TaskUpdateRequest
+		mockSetup func(*MockTaskRepository)
+		wantErr   error
+	}{
+		{
+			name: "success partial update",
+			req: dto.TaskUpdateRequest{
+				Title:       ptr(t, "updated title"),
+				Description: ptr(t, "new description"),
+				Status:      ptr(t, model.TaskStatusInProgress),
+			},
+			mockSetup: func(m *MockTaskRepository) {
+				assigneeId := uuid.New()
+				existingTask := &model.Task{
+					ID:         taskID,
+					Title:      "old title",
+					Status:     model.TaskStatusTodo,
+					AssigneeID: &assigneeId,
+				}
+				m.On("GetByID", mock.Anything, taskID).Return(existingTask, nil)
+				m.On("Update", mock.Anything, mock.AnythingOfType("*model.Task")).Return(nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "err task not found",
+			req:  dto.TaskUpdateRequest{Title: ptr(t, "updated title")},
+			mockSetup: func(m *MockTaskRepository) {
+				m.On("GetByID", mock.Anything, taskID).Return(nil, repository.ErrTaskNotFound)
+			},
+			wantErr: service.ErrTaskNotFound,
+		},
+		{
+			name: "err title too short",
+			req: dto.TaskUpdateRequest{
+				Title: ptr(t, "ab"), // меньше 3 символов
+			},
+			mockSetup: func(m *MockTaskRepository) {
+				existingTask := &model.Task{ID: taskID, Title: "Old"}
+				m.On("GetByID", mock.Anything, taskID).Return(existingTask, nil)
+			},
+			wantErr: service.ErrTitleTooShort,
+		},
+		{
+			name: "err status not valid",
+			req: dto.TaskUpdateRequest{
+				Status: ptr(t, model.TaskStatus("invalid")),
+			},
+			mockSetup: func(m *MockTaskRepository) {
+				existingTask := &model.Task{ID: taskID}
+				m.On("GetByID", mock.Anything, taskID).Return(existingTask, nil)
+			},
+			wantErr: service.ErrInvalidTaskStatus,
+		},
+		{
+			name: "err update repository",
+			req:  dto.TaskUpdateRequest{Title: ptr(t, "test title")},
+			mockSetup: func(m *MockTaskRepository) {
+				existingTask := &model.Task{ID: taskID}
+				m.On("GetByID", mock.Anything, taskID).Return(existingTask, nil)
+				m.On("Update", mock.Anything, mock.AnythingOfType("*model.Task")).
+					Return(errors.New("update failed"))
+			},
+			wantErr: errors.New("update failed"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockRepo := &MockTaskRepository{}
+			tt.mockSetup(mockRepo)
+
+			svc := service.NewTaskService(mockRepo, &worker.Worker{})
+
+			// Act
+			err := svc.UpdateTask(context.Background(), tt.req, taskID)
+
+			// Assert
+			if tt.wantErr != nil {
+				assert.Error(t, err)
+
+				switch {
+				case errors.Is(tt.wantErr, service.ErrTaskNotFound):
+					assert.True(t, errors.Is(err, service.ErrTaskNotFound))
+				case errors.Is(tt.wantErr, service.ErrTitleTooShort):
+					assert.True(t, errors.Is(err, service.ErrTitleTooShort))
+				case errors.Is(tt.wantErr, service.ErrInvalidTaskStatus):
+					assert.True(t, errors.Is(err, service.ErrInvalidTaskStatus))
+				default:
+					assert.EqualError(t, err, tt.wantErr.Error())
+				}
+
+				if errors.Is(tt.wantErr, service.ErrTitleTooShort) || errors.Is(tt.wantErr, service.ErrInvalidTaskStatus) {
+					mockRepo.AssertNotCalled(t, "Update")
+				}
+				return
+			}
+
+			assert.NoError(t, err)
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
 func ptr[T any](t *testing.T, v T) *T {
 	t.Helper()
 	return &v
