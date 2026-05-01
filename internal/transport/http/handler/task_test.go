@@ -3,6 +3,9 @@ package handler_test
 import (
 	"async-api-task-manager/internal/transport/http/handler"
 	"context"
+	"github.com/stretchr/testify/assert"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -85,4 +88,77 @@ func setupRouter(svc *MockTaskService) *gin.Engine {
 	r.DELETE("/tasks/:id", h.DeleteTask)
 
 	return r
+}
+
+func TestTaskHandler_ListTasks(t *testing.T) {
+	tests := []struct {
+		name       string
+		query      string
+		mockSetup  func()
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:  "success list tasks",
+			query: "?status=todo&author_id=123e4567-e89b-12d3-a456-426614174000",
+			mockSetup: func() {
+				mockService.On("ListTasks", mock.Anything, mock.AnythingOfType("dto.Filter")).
+					Return([]dto.TaskListItemResponse{
+						{ID: uuid.New(), Title: "Task 1", Status: "todo"},
+						{ID: uuid.New(), Title: "Task 2", Status: "todo"},
+					}, nil)
+			},
+			wantStatus: http.StatusOK,
+			wantBody:   "Task 1",
+		},
+		{
+			name:       "non valid author_id",
+			query:      "?author_id=non_valid-uuid",
+			mockSetup:  func() {},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "invalid author_id",
+		},
+		{
+			name:       "non valid assignee_id",
+			query:      "?assignee_id=123",
+			mockSetup:  func() {},
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "invalid assignee_id",
+		},
+		{
+			name:  "err service",
+			query: "?status=todo",
+			mockSetup: func() {
+				mockService.On("ListTasks", mock.Anything, mock.Anything).Return([]dto.TaskListItemResponse{}, assert.AnError)
+			},
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   "failed to list tasks",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockService.ExpectedCalls = nil
+			mockService.Calls = nil
+
+			if tt.mockSetup != nil {
+				tt.mockSetup()
+			}
+
+			t.Cleanup(func() {
+				mockService.AssertExpectations(t)
+			})
+
+			req := httptest.NewRequest("GET", "/tasks"+tt.query, nil)
+			w := httptest.NewRecorder()
+
+			testRouter.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			if tt.wantBody != "" {
+				assert.Contains(t, w.Body.String(), tt.wantBody)
+			}
+		})
+	}
 }
