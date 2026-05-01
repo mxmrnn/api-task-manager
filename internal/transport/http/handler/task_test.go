@@ -255,3 +255,194 @@ func TestTaskHandler_CreateTask(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskHandler_UpdateTask(t *testing.T) {
+	taskID := uuid.New().String()
+
+	tests := []struct {
+		name         string
+		taskID       string
+		body         string
+		mockSetup    func()
+		wantStatus   int
+		wantContains string
+	}{
+		{
+			name:   "success update task",
+			taskID: taskID,
+			body:   `{"title": "title 1", "status": "in_progress"}`,
+			mockSetup: func() {
+				mockService.On("UpdateTask", mock.Anything, mock.AnythingOfType("dto.TaskUpdateRequest"), mock.Anything).
+					Return(nil)
+			},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:         "err non correct UUID",
+			taskID:       "not-a-uuid",
+			body:         `{"title": "Test"}`,
+			mockSetup:    func() {},
+			wantStatus:   http.StatusBadRequest,
+			wantContains: "invalid task id",
+		},
+		{
+			name:         "err non correct JSON",
+			taskID:       taskID,
+			body:         `{"title": "title 1", "status": non valid}`,
+			mockSetup:    func() {},
+			wantStatus:   http.StatusBadRequest,
+			wantContains: "invalid request body",
+		},
+		{
+			name:   "err task not found",
+			taskID: taskID,
+			body:   `{"title": "title 1"}`,
+			mockSetup: func() {
+				mockService.On("UpdateTask", mock.Anything, mock.Anything, mock.Anything).
+					Return(service.ErrTaskNotFound)
+			},
+			wantStatus:   http.StatusNotFound,
+			wantContains: "task not found",
+		},
+		{
+			name:   "err title too short",
+			taskID: taskID,
+			body:   `{"title": "ab"}`,
+			mockSetup: func() {
+				mockService.On("UpdateTask", mock.Anything, mock.Anything, mock.Anything).
+					Return(service.ErrTitleTooShort)
+			},
+			wantStatus:   http.StatusBadRequest,
+			wantContains: "title must be at least 3 characters",
+		},
+		{
+			name:   "err status non correct",
+			taskID: taskID,
+			body:   `{"status": "invalid_status"}`,
+			mockSetup: func() {
+				mockService.On("UpdateTask", mock.Anything, mock.Anything, mock.Anything).
+					Return(service.ErrInvalidTaskStatus)
+			},
+			wantStatus:   http.StatusBadRequest,
+			wantContains: "invalid task status",
+		},
+		{
+			name:   "err from service",
+			taskID: taskID,
+			body:   `{"title": "title 1"}`,
+			mockSetup: func() {
+				mockService.On("UpdateTask", mock.Anything, mock.Anything, mock.Anything).
+					Return(assert.AnError)
+			},
+			wantStatus:   http.StatusInternalServerError,
+			wantContains: "internal server error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockService.ExpectedCalls = nil
+			mockService.Calls = nil
+
+			tt.mockSetup()
+
+			t.Cleanup(func() {
+				mockService.AssertExpectations(t)
+			})
+
+			req := httptest.NewRequest("PUT", "/tasks/"+tt.taskID, bytes.NewReader([]byte(tt.body)))
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+
+			// Act
+			testRouter.ServeHTTP(w, req)
+
+			// Assert
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			if tt.wantContains != "" {
+				assert.Contains(t, w.Body.String(), tt.wantContains)
+			}
+
+		})
+	}
+}
+
+func TestTaskHandler_DeleteTask(t *testing.T) {
+	validID := uuid.New().String()
+
+	tests := []struct {
+		name         string
+		taskID       string
+		mockSetup    func()
+		wantStatus   int
+		wantContains string
+	}{
+		{
+			name:   "success delete task",
+			taskID: validID,
+			mockSetup: func() {
+				mockService.On("DeleteTask", mock.Anything, mock.AnythingOfType("uuid.UUID")).
+					Return(nil)
+			},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:         "err non correct UUID",
+			taskID:       "not-a-valid-uuid",
+			mockSetup:    func() {},
+			wantStatus:   http.StatusBadRequest,
+			wantContains: "invalid task id",
+		},
+		{
+			name:   "err task non found",
+			taskID: validID,
+			mockSetup: func() {
+				mockService.On("DeleteTask", mock.Anything, mock.AnythingOfType("uuid.UUID")).
+					Return(service.ErrTaskNotFound)
+			},
+			wantStatus:   http.StatusNotFound,
+			wantContains: "task not found",
+		},
+		{
+			name:   "err from service",
+			taskID: validID,
+			mockSetup: func() {
+				mockService.On("DeleteTask", mock.Anything, mock.AnythingOfType("uuid.UUID")).
+					Return(assert.AnError)
+			},
+			wantStatus:   http.StatusInternalServerError,
+			wantContains: "internal error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockService.ExpectedCalls = nil
+			mockService.Calls = nil
+
+			tt.mockSetup()
+
+			t.Cleanup(func() {
+				mockService.AssertExpectations(t)
+			})
+
+			req := httptest.NewRequest("DELETE", "/tasks/"+tt.taskID, nil)
+			w := httptest.NewRecorder()
+
+			// Act
+			testRouter.ServeHTTP(w, req)
+
+			// Assert
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			if tt.wantContains != "" {
+				assert.Contains(t, w.Body.String(), tt.wantContains)
+			}
+
+		})
+	}
+}
