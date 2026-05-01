@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"async-api-task-manager/internal/transport/http/handler"
+	"bytes"
 	"context"
 	"github.com/stretchr/testify/assert"
 	"net/http"
@@ -159,6 +160,98 @@ func TestTaskHandler_ListTasks(t *testing.T) {
 			if tt.wantBody != "" {
 				assert.Contains(t, w.Body.String(), tt.wantBody)
 			}
+		})
+	}
+}
+
+func TestTaskHandler_CreateTask(t *testing.T) {
+	tests := []struct {
+		name         string
+		body         string
+		mockSetup    func()
+		wantStatus   int
+		wantContains string
+	}{
+		{
+			name: "success create task",
+			body: `{
+				"title": "task 1",
+				"description": "description 1",
+				"authorId": "123e4567-e89b-12d3-a456-426614174000"
+			}`,
+			mockSetup: func() {
+				mockService.On("CreateTask", mock.Anything, mock.Anything).
+					Return(dto.TaskCreatedResponse{ID: uuid.New()}, nil)
+			},
+			wantStatus:   http.StatusCreated,
+			wantContains: `"id":`,
+		},
+		{
+			name: "err title to short",
+			body: `{"title": "ab"}`,
+			mockSetup: func() {
+				mockService.On("CreateTask", mock.Anything, mock.Anything).
+					Return(dto.TaskCreatedResponse{}, service.ErrTitleTooShort)
+			},
+			wantStatus:   http.StatusBadRequest,
+			wantContains: "title must be at least 3 characters",
+		},
+		{
+			name: "err status not valid",
+			body: `{"title": "title one", "status": "not valid"}`,
+			mockSetup: func() {
+				mockService.On("CreateTask", mock.Anything, mock.Anything).
+					Return(dto.TaskCreatedResponse{}, service.ErrInvalidTaskStatus)
+			},
+			wantStatus:   http.StatusBadRequest,
+			wantContains: "invalid task status",
+		},
+		{
+			name:         "err non correct JSON",
+			body:         `{"title": "title one", "status": non valid}`,
+			mockSetup:    func() {},
+			wantStatus:   http.StatusBadRequest,
+			wantContains: "invalid request body",
+		},
+		{
+			name: "err from service(внутренняя)",
+			body: `{"title": "title one"}`,
+			mockSetup: func() {
+				mockService.On("CreateTask", mock.Anything, mock.Anything).
+					Return(dto.TaskCreatedResponse{}, assert.AnError)
+			},
+			wantStatus:   http.StatusInternalServerError,
+			wantContains: "internal server error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockService.ExpectedCalls = nil
+			mockService.Calls = nil
+
+			// Arrange
+			tt.mockSetup()
+
+			t.Cleanup(func() {
+				mockService.AssertExpectations(t)
+			})
+
+			req := httptest.NewRequest("POST", "/tasks", bytes.NewReader([]byte(tt.body)))
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+
+			// Act
+			testRouter.ServeHTTP(w, req)
+
+			// Assert
+			assert.Equal(t, tt.wantStatus, w.Code)
+
+			if tt.wantContains != "" {
+				assert.Contains(t, w.Body.String(), tt.wantContains)
+			}
+
 		})
 	}
 }
