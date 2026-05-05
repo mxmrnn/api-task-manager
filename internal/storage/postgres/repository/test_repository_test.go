@@ -1,3 +1,6 @@
+//task_integration_test.go
+//go:build integration
+
 package repository_test
 
 import (
