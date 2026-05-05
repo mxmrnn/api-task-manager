@@ -1,4 +1,3 @@
-//task_integration_test.go
 //go:build integration
 
 package repository_test
@@ -7,8 +6,10 @@ import (
 	"async-api-task-manager/internal/storage/postgres/repository"
 	taskdomain "async-api-task-manager/internal/transport/http/dto"
 	"context"
+	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -81,7 +82,7 @@ func TestTaskRepository_Update(t *testing.T) {
 	err := repo.Create(context.Background(), task)
 	require.NoError(t, err)
 
-	task.Title = "Обновлённый заголовок"
+	task.Title = "updated title"
 	task.Status = model.TaskStatusInProgress
 
 	err = repo.Update(context.Background(), task)
@@ -89,7 +90,7 @@ func TestTaskRepository_Update(t *testing.T) {
 
 	updated, err := repo.GetByID(context.Background(), task.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "Обновлённый заголовок", updated.Title)
+	assert.Equal(t, "updated title", updated.Title)
 	assert.Equal(t, model.TaskStatusInProgress, updated.Status)
 }
 
@@ -119,6 +120,14 @@ func createTestAuthor(t *testing.T) *model.User {
 		Email:    "author." + uuid.NewString()[:8] + "@example.com",
 	}
 	require.NoError(t, repository.TestDB.Create(author).Error)
+	t.Cleanup(func() {
+
+		repository.TestDB.Where("author_id = ?", author.ID).Delete(&model.Task{})
+
+		if err := repository.TestDB.Unscoped().Delete(author).Error; err != nil {
+			t.Logf("cleanup warning: failed to delete author %s: %v", author.ID, err)
+		}
+	})
 	return author
 }
 
@@ -130,6 +139,16 @@ func createTestTask(t *testing.T, repo *repository.TaskRepository, authorID uuid
 		AuthorID: authorID,
 	}
 	require.NoError(t, repo.Create(context.Background(), task))
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := repo.Delete(ctx, task.ID); err != nil && !errors.Is(err, repository.ErrTaskNotFound) {
+			t.Logf("сleanup warning: failed to delete task %s: %v", task.ID, err)
+		}
+	})
+
 	return task
 }
 
