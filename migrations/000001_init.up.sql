@@ -12,15 +12,7 @@ END IF;
 END
 $$;
 
-CREATE TABLE IF NOT EXISTS users (
-    id UUID DEFAULT gen_random_uuid(),
-    full_name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT pk_users PRIMARY KEY (id),
-    CONSTRAINT uq_users_email UNIQUE (email)
-);
 
 CREATE TABLE IF NOT EXISTS boards (
     id UUID DEFAULT gen_random_uuid(),
@@ -78,8 +70,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     group_id UUID,
 
     CONSTRAINT pk_tasks PRIMARY KEY (id),
-    CONSTRAINT fk_tasks_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_tasks_assignee FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL,
     CONSTRAINT fk_tasks_board FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE SET NULL,
     CONSTRAINT fk_tasks_board_column FOREIGN KEY (board_column_id) REFERENCES board_columns(id) ON DELETE SET NULL,
     CONSTRAINT fk_tasks_sprint FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE SET NULL,
@@ -91,18 +81,16 @@ CREATE TABLE IF NOT EXISTS task_watchers (
     user_id UUID NOT NULL,
 
     CONSTRAINT pk_task_watchers PRIMARY KEY (task_id, user_id),
-    CONSTRAINT fk_task_watchers_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-    CONSTRAINT fk_task_watchers_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
+    CONSTRAINT fk_task_watchers_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    );
 
 CREATE TABLE IF NOT EXISTS task_executors (
     task_id UUID NOT NULL,
     user_id UUID NOT NULL,
 
     CONSTRAINT pk_task_executors PRIMARY KEY (task_id, user_id),
-    CONSTRAINT fk_task_executors_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-    CONSTRAINT fk_task_executors_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
+    CONSTRAINT fk_task_executors_task FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    );
 
 CREATE INDEX idx_tasks_created_at ON tasks(created_at);
 CREATE INDEX idx_tasks_author_id ON tasks(author_id);
@@ -116,4 +104,3 @@ CREATE INDEX idx_sprints_board_id ON sprints(board_id);
 CREATE INDEX idx_boards_created_at ON boards(created_at);
 CREATE INDEX idx_sprints_created_at ON sprints(created_at);
 CREATE INDEX idx_groups_created_at ON groups(created_at);
-CREATE INDEX idx_users_created_at ON users(created_at);
