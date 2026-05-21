@@ -27,8 +27,6 @@ func (r *TaskRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Task
 	var task model.Task
 
 	if err := r.db.WithContext(ctx).
-		Preload("Author").
-		Preload("Assignee").
 		Preload("Board").
 		Preload("BoardColumn").
 		Preload("Sprint").
