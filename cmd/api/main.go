@@ -1,6 +1,7 @@
 package main
 
 import (
+	"async-api-task-manager/internal/client"
 	"async-api-task-manager/internal/service"
 	"async-api-task-manager/internal/storage/postgres"
 	repository2 "async-api-task-manager/internal/storage/postgres/repository"
@@ -42,8 +43,16 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	userHandler := handler.NewUserHandler(userService)
 
+	rpcClient, err := client.NewRPCClient("amqp://guest:guest@rabbitmq:5672")
+	if err != nil {
+		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+	}
+	defer rpcClient.Close()
+
+	authClient := client.NewAuthClient(rpcClient)
+
 	taskRepo := repository2.NewTaskRepository(database)
-	taskService := service.NewTaskService(taskRepo, w)
+	taskService := service.NewTaskService(taskRepo, authClient, w)
 	taskHandler := handler.NewTaskHandler(taskService)
 
 	rpcServer, err := rpc.NewServer("amqp://guest:guest@rabbitmq:5672")
