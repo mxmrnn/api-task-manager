@@ -55,6 +55,16 @@ func (m *MockTaskRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return args.Error(0)
 }
 
+func (m *MockTaskRepository) GetUserStats(ctx context.Context, id uuid.UUID) (model.UserTaskStats, error) {
+	args := m.Called(ctx, id)
+	var stats model.UserTaskStats
+
+	if arg := args.Get(0); arg != nil {
+		stats = arg.(model.UserTaskStats)
+	}
+	return stats, args.Error(1)
+}
+
 var _ service.TaskRepository = (*MockTaskRepository)(nil)
 
 func TestTaskService_GetTaskByID(t *testing.T) {
