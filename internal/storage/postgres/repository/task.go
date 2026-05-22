@@ -27,8 +27,6 @@ func (r *TaskRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Task
 	var task model.Task
 
 	if err := r.db.WithContext(ctx).
-		Preload("Author").
-		Preload("Assignee").
 		Preload("Board").
 		Preload("BoardColumn").
 		Preload("Sprint").
@@ -92,4 +90,20 @@ func (r *TaskRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+func (r *TaskRepository) GetUserStats(ctx context.Context, id uuid.UUID) (model.UserTaskStats, error) {
+	var stats model.UserTaskStats
+
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT 
+			(SELECT COUNT(*) FROM task_executors WHERE user_id = ?) AS as_assignee,
+			(SELECT COUNT(*) FROM task_watchers   WHERE user_id = ?) AS as_watcher
+	`, id, id).Scan(&stats).Error
+
+	if err != nil {
+		return model.UserTaskStats{}, fmt.Errorf("task repository get user stats: %w", err)
+	}
+
+	return stats, nil
 }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"async-api-task-manager/internal/client"
 	"async-api-task-manager/internal/storage/postgres/repository"
 	"async-api-task-manager/internal/transport/http/dto"
 	"context"
@@ -20,6 +21,7 @@ type TaskRepository interface {
 	List(ctx context.Context, filter dto.Filter) ([]model.Task, error)
 	Update(ctx context.Context, task *model.Task) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	GetUserStats(ctx context.Context, id uuid.UUID) (model.UserTaskStats, error)
 }
 
 type TaskService interface {
@@ -28,17 +30,20 @@ type TaskService interface {
 	ListTasks(ctx context.Context, filter dto.Filter) ([]dto.TaskListItemResponse, error)
 	UpdateTask(ctx context.Context, req dto.TaskUpdateRequest, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) error
+	GetUserTaskCounts(ctx context.Context, id uuid.UUID) (dto.TaskStatsResponse, error)
 }
 
 type taskService struct {
-	taskRepo TaskRepository
-	worker   *worker.Worker
+	taskRepo   TaskRepository
+	authClient client.AuthClient
+	worker     *worker.Worker
 }
 
-func NewTaskService(taskRepo TaskRepository, bgWorker *worker.Worker) TaskService {
+func NewTaskService(taskRepo TaskRepository, authClient client.AuthClient, bgWorker *worker.Worker) TaskService {
 	return &taskService{
-		taskRepo: taskRepo,
-		worker:   bgWorker,
+		taskRepo:   taskRepo,
+		authClient: authClient,
+		worker:     bgWorker,
 	}
 }
 
@@ -52,25 +57,33 @@ func (s *taskService) GetTaskByID(ctx context.Context, id uuid.UUID) (dto.TaskDe
 		return dto.TaskDetailResponse{}, err
 	}
 
-	return toTaskDetailResponse(*task), nil
-}
+	detailResponse := s.toTaskDetailResponse(*task)
 
-func toTaskDetailResponse(task model.Task) dto.TaskDetailResponse {
 	var author dto.UserShort
-	if task.Author.ID != uuid.Nil {
+	if authorO, err := s.authClient.GetUserInfo(ctx, task.AuthorID); err == nil {
 		author = dto.UserShort{
-			ID:       task.Author.ID,
-			FullName: task.Author.FullName,
+			ID:       authorO.ID,
+			FullName: authorO.FullName,
 		}
 	}
 
 	var assignee *dto.UserShort
-	if task.Assignee != nil {
-		assignee = &dto.UserShort{
-			ID:       task.Assignee.ID,
-			FullName: task.Assignee.FullName,
+	if task.AssigneeID != nil {
+		if assigneeA, err := s.authClient.GetUserInfo(ctx, *task.AssigneeID); err == nil {
+			assignee = &dto.UserShort{
+				ID:       assigneeA.ID,
+				FullName: assigneeA.FullName,
+			}
 		}
 	}
+
+	detailResponse.Author = author
+	detailResponse.Assignee = assignee
+
+	return detailResponse, nil
+}
+
+func (s *taskService) toTaskDetailResponse(task model.Task) dto.TaskDetailResponse {
 
 	var board *dto.BoardShort
 	if task.Board != nil {
@@ -111,12 +124,24 @@ func toTaskDetailResponse(task model.Task) dto.TaskDetailResponse {
 		Description: task.Description,
 		Status:      task.Status,
 
-		Author:   author,
-		Assignee: assignee,
+		Author:   dto.UserShort{},
+		Assignee: nil,
 		Board:    board,
 		Column:   column,
 		Sprint:   sprint,
 		Group:    group,
+	}
+}
+
+func (s *taskService) getUserShort(ctx context.Context, userID uuid.UUID) dto.UserShort {
+	user, err := s.authClient.GetUserInfo(ctx, userID)
+	if err != nil {
+		return dto.UserShort{}
+	}
+
+	return dto.UserShort{
+		ID:       user.ID,
+		FullName: user.FullName,
 	}
 }
 
@@ -304,4 +329,16 @@ func toTaskCreatedResponse(task model.Task) dto.TaskCreatedResponse {
 	return dto.TaskCreatedResponse{
 		ID: task.ID,
 	}
+}
+
+func (s *taskService) GetUserTaskCounts(ctx context.Context, id uuid.UUID) (dto.TaskStatsResponse, error) {
+	tsr, err := s.taskRepo.GetUserStats(ctx, id)
+	if err != nil {
+		return dto.TaskStatsResponse{}, err
+	}
+
+	return dto.TaskStatsResponse{
+		AsWatcher:  tsr.AsWatcher,
+		AsAssignee: tsr.AsAssignee,
+	}, nil
 }

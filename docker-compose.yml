@@ -1,55 +1,66 @@
-services:
-  postgres:
-    image: postgres:16
-    container_name: task-postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: task_manager
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d task_manager"]
-      interval: 3s
-      timeout: 3s
-      retries: 15
-      start_period: 5s
+  services:
+    postgres:
+      image: postgres:16
+      container_name: task-postgres
+      environment:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: task_manager
+      ports:
+        - "5432:5432"
+      volumes:
+        - postgres_data:/var/lib/postgresql/data
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U postgres -d task_manager"]
+        interval: 5s
+        timeout: 5s
+        retries: 10
+      networks:
+        - backend
 
-  migrate:
-    image: migrate/migrate:4
-    container_name: task-migrate
-    depends_on:
-      postgres:
+    migrate:
+      image: migrate/migrate:4
+      container_name: task-migrate
+      depends_on:
+        postgres:
           condition: service_healthy
-    volumes:
-      - ./migrations:/migrations
-    command:
-      [
-        "-path", "/migrations",
-        "-database", "postgres://postgres:postgres@postgres:5432/task_manager?sslmode=disable",
-        "up"
-      ]
-    restart: "no"
+      volumes:
+        - ./migrations:/migrations
+      command:
+        - "-path"
+        - "/migrations"
+        - "-database"
+        - "postgres://postgres:postgres@postgres:5432/task_manager?sslmode=disable"
+        - "up"
+      restart: "no"
+      networks:
+        - backend
 
-  app:
-    build: .
-    container_name: task-app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: task_manager
-      GIN_MODE: release
-    ports:
-      - "8080:8080"
+    app:
+      build: .
+      container_name: task-app
+      depends_on:
+        postgres:
+          condition: service_healthy
+        migrate:
+          condition: service_completed_successfully
+      environment:
+        DB_HOST: postgres
+        DB_PORT: "5432"
+        DB_USER: postgres
+        DB_PASSWORD: postgres
+        DB_NAME: task_manager
+        GIN_MODE: release
+      ports:
+        - "8080:8080"
+      networks:
+        - backend
+      restart: unless-stopped
 
-volumes:
-  postgres_data:
+  networks:
+    backend:
+      external: true
+      name: task_system_backend
+
+  volumes:
+    postgres_data:

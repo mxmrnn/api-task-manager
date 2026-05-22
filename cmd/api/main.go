@@ -1,11 +1,13 @@
 package main
 
 import (
+	"async-api-task-manager/internal/client"
 	"async-api-task-manager/internal/service"
 	"async-api-task-manager/internal/storage/postgres"
 	repository2 "async-api-task-manager/internal/storage/postgres/repository"
 	"async-api-task-manager/internal/transport/http"
 	"async-api-task-manager/internal/transport/http/handler"
+	"async-api-task-manager/internal/transport/rpc"
 	"async-api-task-manager/internal/worker"
 	"context"
 	"fmt"
@@ -41,9 +43,30 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	userHandler := handler.NewUserHandler(userService)
 
+	rpcClient, err := client.NewRPCClient("amqp://guest:guest@rabbitmq:5672")
+	if err != nil {
+		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+	}
+	defer rpcClient.Close()
+
+	authClient := client.NewAuthClient(rpcClient)
+
 	taskRepo := repository2.NewTaskRepository(database)
-	taskService := service.NewTaskService(taskRepo, w)
+	taskService := service.NewTaskService(taskRepo, authClient, w)
 	taskHandler := handler.NewTaskHandler(taskService)
+
+	rpcServer, err := rpc.NewServer("amqp://guest:guest@rabbitmq:5672")
+	if err != nil {
+		log.Fatalf("failed to create rpc server: %v", err)
+	}
+	defer rpcServer.Close()
+
+	rpcHandler := rpc.NewHandler(taskService)
+
+	err = rpcServer.Start("task-service.rpc", rpcHandler.GetUserTaskStatsHandler)
+	if err != nil {
+		log.Fatalf("failde to start rpc server: %v", err)
+	}
 
 	r := http.SetupRouter(taskHandler, userHandler)
 	log.Println("router initialized")
