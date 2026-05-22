@@ -20,6 +20,7 @@ type TaskRepository interface {
 	List(ctx context.Context, filter dto.Filter) ([]model.Task, error)
 	Update(ctx context.Context, task *model.Task) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	GetUserStats(ctx context.Context, id uuid.UUID) (model.UserTaskStats, error)
 }
 
 type TaskService interface {
@@ -28,6 +29,7 @@ type TaskService interface {
 	ListTasks(ctx context.Context, filter dto.Filter) ([]dto.TaskListItemResponse, error)
 	UpdateTask(ctx context.Context, req dto.TaskUpdateRequest, id uuid.UUID) error
 	DeleteTask(ctx context.Context, id uuid.UUID) error
+	GetUserTaskCounts(ctx context.Context, id uuid.UUID) (dto.TaskStatsResponse, error)
 }
 
 type taskService struct {
@@ -304,4 +306,16 @@ func toTaskCreatedResponse(task model.Task) dto.TaskCreatedResponse {
 	return dto.TaskCreatedResponse{
 		ID: task.ID,
 	}
+}
+
+func (s *taskService) GetUserTaskCounts(ctx context.Context, id uuid.UUID) (dto.TaskStatsResponse, error) {
+	tsr, err := s.taskRepo.GetUserStats(ctx, id)
+	if err != nil {
+		return dto.TaskStatsResponse{}, err
+	}
+
+	return dto.TaskStatsResponse{
+		AsWatcher:  tsr.AsWatcher,
+		AsAssignee: tsr.AsAssignee,
+	}, nil
 }

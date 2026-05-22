@@ -38,3 +38,8 @@ type Task struct {
 
 	Watchers []User `gorm:"many2many:task_watchers;"`
 }
+
+type UserTaskStats struct {
+	AsAssignee int `gorm:"column:as_assignee"`
+	AsWatcher  int `gorm:"column:as_watcher"`
+}
