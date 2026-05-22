@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"async-api-task-manager/internal/client"
 	"async-api-task-manager/internal/model"
 	"async-api-task-manager/internal/service"
 	"async-api-task-manager/internal/storage/postgres/repository"
@@ -67,25 +68,46 @@ func (m *MockTaskRepository) GetUserStats(ctx context.Context, id uuid.UUID) (mo
 
 var _ service.TaskRepository = (*MockTaskRepository)(nil)
 
+type MockAuthService struct {
+	mock.Mock
+}
+
+func (m *MockAuthService) GetUserInfo(ctx context.Context, id uuid.UUID) (*dto.UserShort, error) {
+	args := m.Called(ctx, id)
+
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(*dto.UserShort), args.Error(1)
+}
+
+var _ client.AuthClient = (*MockAuthService)(nil)
+
 func TestTaskService_GetTaskByID(t *testing.T) {
 	tests := []struct {
 		name      string
 		taskID    uuid.UUID
-		mockSetup func(*MockTaskRepository)
+		mockSetup func(mock *MockTaskRepository, auth *MockAuthService)
 		wantErr   error
 		wantTitle string
 	}{
 		{
 			name:   "success get by id task",
 			taskID: uuid.New(),
-			mockSetup: func(m *MockTaskRepository) {
+			mockSetup: func(m *MockTaskRepository, a *MockAuthService) {
 				task := &model.Task{
 					ID:          uuid.New(),
 					Title:       "Test task",
 					Description: "Test description",
 					Status:      model.TaskStatusTodo,
 				}
-				m.On("GetByID", mock.Anything, mock.Anything).Return(task, nil)
+				m.On("GetByID", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(task, nil)
+				a.On("GetUserInfo", mock.Anything, mock.AnythingOfType("uuid.UUID")).Return(
+					&dto.UserShort{
+						ID:       uuid.New(),
+						FullName: "FullName",
+					}, nil)
 			},
 			wantErr:   nil,
 			wantTitle: "Test task",
@@ -93,7 +115,7 @@ func TestTaskService_GetTaskByID(t *testing.T) {
 		{
 			name:   "task not found",
 			taskID: uuid.New(),
-			mockSetup: func(m *MockTaskRepository) {
+			mockSetup: func(m *MockTaskRepository, a *MockAuthService) {
 				m.On("GetByID", mock.Anything, mock.Anything).Return(nil, repository.ErrTaskNotFound)
 			},
 			wantErr: service.ErrTaskNotFound,
@@ -101,7 +123,7 @@ func TestTaskService_GetTaskByID(t *testing.T) {
 		{
 			name:   "else err of repository",
 			taskID: uuid.New(),
-			mockSetup: func(m *MockTaskRepository) {
+			mockSetup: func(m *MockTaskRepository, a *MockAuthService) {
 				m.On("GetByID", mock.Anything, mock.Anything).Return(nil, errors.New("db connection error"))
 			},
 			wantErr: errors.New("db connection error"),
@@ -111,9 +133,11 @@ func TestTaskService_GetTaskByID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
 			mockRepo := &MockTaskRepository{}
-			tt.mockSetup(mockRepo)
+			authRepo := &MockAuthService{}
 
-			svc := service.NewTaskService(mockRepo, &worker.Worker{})
+			tt.mockSetup(mockRepo, authRepo)
+
+			svc := service.NewTaskService(mockRepo, authRepo, &worker.Worker{})
 
 			// Act
 			resp, err := svc.GetTaskByID(context.Background(), tt.taskID)
@@ -136,7 +160,7 @@ func TestTaskService_ListTasks(t *testing.T) {
 	tests := []struct {
 		name      string
 		filter    dto.Filter
-		mockSetup func(*MockTaskRepository)
+		mockSetup func(repo *MockTaskRepository)
 		wantErr   error
 		wantCount int
 	}{
@@ -199,7 +223,7 @@ func TestTaskService_ListTasks(t *testing.T) {
 			mockRepo := &MockTaskRepository{}
 			tt.mockSetup(mockRepo)
 
-			svc := service.NewTaskService(mockRepo, &worker.Worker{})
+			svc := service.NewTaskService(mockRepo, client.NewAuthClient(nil), &worker.Worker{})
 
 			// Act
 			resp, err := svc.ListTasks(context.Background(), tt.filter)
@@ -297,7 +321,7 @@ func TestTaskService_CreateTask(t *testing.T) {
 			mockRepo := &MockTaskRepository{}
 			tt.mockSetup(mockRepo)
 
-			svc := service.NewTaskService(mockRepo, &worker.Worker{})
+			svc := service.NewTaskService(mockRepo, client.NewAuthClient(nil), &worker.Worker{})
 
 			// Act
 			resp, err := svc.CreateTask(context.Background(), tt.req)
@@ -366,7 +390,7 @@ func TestTaskService_DeleteTask(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo := &MockTaskRepository{}
 			tt.mockSetup(mockRepo)
-			srv := service.NewTaskService(mockRepo, &worker.Worker{})
+			srv := service.NewTaskService(mockRepo, client.NewAuthClient(nil), &worker.Worker{})
 
 			err := srv.DeleteTask(context.Background(), tt.id)
 
@@ -462,7 +486,7 @@ func TestTaskService_UpdateTask(t *testing.T) {
 			mockRepo := &MockTaskRepository{}
 			tt.mockSetup(mockRepo)
 
-			svc := service.NewTaskService(mockRepo, &worker.Worker{})
+			svc := service.NewTaskService(mockRepo, client.NewAuthClient(nil), &worker.Worker{})
 
 			// Act
 			err := svc.UpdateTask(context.Background(), tt.req, taskID)
